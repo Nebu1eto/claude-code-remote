@@ -4,7 +4,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-A Python package that integrates Claude Code hooks with Telegram Bot to:
+A Claude Code hooks integration with Telegram Bot, available in both Python and Rust versions:
+- **Python version** (`claude_code_telegram/`): Full-featured, ~50MB binary
+- **Rust version** (`rust/`): Lightweight, ~4MB binary
+
+Features:
 - Intercept Claude Code permission requests via hooks
 - Send notifications to users via Telegram (includes hostname for multi-machine setups)
 - Receive user decisions (approve/deny/always allow) through Telegram inline keyboards
@@ -57,7 +61,18 @@ Claude Code hooks are configured in `~/.claude/settings.json` or project's `.cla
         "hooks": [
           {
             "type": "command",
-            "command": "claude-code-telegram-hook"
+            "command": "claude-code-telegram hook"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "matcher": {},
+        "hooks": [
+          {
+            "type": "command",
+            "command": "claude-code-telegram stop"
           }
         ]
       }
@@ -70,12 +85,16 @@ The hook script receives JSON via stdin with the permission request details and 
 
 ## Development Commands
 
+### Python
+
 ```bash
 # Install package in development mode
 uv sync --all-extras
 
-# Run the Telegram bot (for /start, /help commands)
-claude-code-telegram-bot
+# Run CLI commands
+claude-code-telegram hook   # Permission request handler
+claude-code-telegram stop   # Job completion handler
+claude-code-telegram bot    # Long-running Telegram bot
 
 # Run tests
 make test
@@ -92,6 +111,23 @@ make format
 # Build self-executable binary (requires: pip install pex)
 make build-scie        # ~50MB, bundled Python
 make build-scie-lazy   # ~5MB, fetches Python on first run
+```
+
+### Rust
+
+```bash
+cd rust
+
+# Build release binary (~4MB)
+cargo build --release
+
+# Run tests
+cargo test
+
+# Run CLI commands
+./target/release/claude-code-telegram hook
+./target/release/claude-code-telegram stop
+./target/release/claude-code-telegram bot
 ```
 
 ## Configuration

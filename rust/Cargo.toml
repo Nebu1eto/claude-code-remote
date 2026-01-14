@@ -1,0 +1,35 @@
+[package]
+name = "claude-code-telegram"
+version = "1.0.0"
+edition = "2021"
+rust-version = "1.75"
+description = "Claude Code hook & Telegram Bot integration"
+license = "MIT"
+
+[[bin]]
+name = "claude-code-telegram"
+path = "src/main.rs"
+
+[dependencies]
+teloxide = { version = "0.13", features = ["macros"] }
+tokio = { version = "1", features = ["full", "signal"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+clap = { version = "4", features = ["derive"] }
+directories = "5"
+dotenvy = "0.15"
+thiserror = "2"
+anyhow = "1"
+uuid = { version = "1", features = ["v4"] }
+hostname = "0.4"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+[dev-dependencies]
+tempfile = "3"
+
+[profile.release]
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true
