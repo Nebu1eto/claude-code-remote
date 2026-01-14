@@ -1,4 +1,4 @@
-# claude-code-decision-telegram-bot
+# Claude Code Remote
 
 Claude Code hook & Telegram Bot to notify user about active CC permission request and receive the decision via Telegram bot.
 
