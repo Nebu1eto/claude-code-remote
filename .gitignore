@@ -20,7 +20,7 @@ archives/.venv/
 archives/.pytest_cache/
 archives/.mypy_cache/
 archives/.ruff_cache/
-archives/__pycache__/
+archives/**/__pycache__/
 archives/*.egg-info/
 archives/build/
 archives/dist/
