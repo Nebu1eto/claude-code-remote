@@ -8,6 +8,7 @@ Claude Code hook & Telegram Bot to notify user about active CC permission reques
 - Sends notifications to Telegram with tool details
 - Inline keyboard buttons for Allow/Deny/Always Allow decisions
 - **Always Allow**: Remember tool preferences for automatic approval
+- **Job Completion Notifications**: Get notified when Claude Code finishes a task
 - Returns decisions back to Claude Code
 
 ## Installation
@@ -79,7 +80,7 @@ TELEGRAM_CHAT_ID=your_chat_id_here
 
 The hook checks for JSON config first, then falls back to environment variables.
 
-### 5. Configure Claude Code Hooks
+### 4. Configure Claude Code Hooks
 
 Add to your `~/.claude/settings.json` or project `.claude/settings.json`:
 
@@ -98,10 +99,23 @@ Add to your `~/.claude/settings.json` or project `.claude/settings.json`:
           }
         ]
       }
+    ],
+    "Stop": [
+      {
+        "matcher": {},
+        "hooks": [
+          {
+            "type": "command",
+            "command": "claude-code-telegram-stop"
+          }
+        ]
+      }
     ]
   }
 }
 ```
+
+The `Stop` hook is optional - add it if you want job completion notifications.
 
 ## Usage
 
@@ -132,8 +146,11 @@ To reset preferences, delete or edit this file.
 After installation, these commands are available:
 
 ```bash
-# Run the hook handler (used by Claude Code hooks)
+# Permission request hook handler (used by Claude Code PermissionRequest hooks)
 claude-code-telegram-hook
+
+# Job completion hook handler (used by Claude Code Stop hooks)
+claude-code-telegram-stop
 
 # Run the Telegram bot (for /start, /help commands)
 claude-code-telegram-bot

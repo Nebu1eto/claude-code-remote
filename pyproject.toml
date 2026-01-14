@@ -16,6 +16,7 @@ dependencies = [
 [project.scripts]
 claude-code-telegram-bot = "claude_code_telegram.bot:main"
 claude-code-telegram-hook = "claude_code_telegram.hook_handler:main"
+claude-code-telegram-stop = "claude_code_telegram.stop_handler:main"
 
 [project.optional-dependencies]
 dev = [
