@@ -2,6 +2,7 @@
 
 import json
 from pathlib import Path
+from typing import cast
 
 
 class AlwaysAllowManager:
@@ -26,7 +27,7 @@ class AlwaysAllowManager:
                 data = json.load(f)
                 if "tools" not in data:
                     data["tools"] = []
-                return data
+                return cast(dict[str, list[str]], data)
         except (json.JSONDecodeError, FileNotFoundError):
             return {"tools": []}
 

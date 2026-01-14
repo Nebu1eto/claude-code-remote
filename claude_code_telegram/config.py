@@ -8,7 +8,6 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
-
 DEFAULT_CONFIG_PATH = Path.home() / ".claude" / "telegram_hook.json"
 
 
