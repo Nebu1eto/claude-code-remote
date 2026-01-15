@@ -36,15 +36,15 @@ BOLD='\033[1m'
 NC='\033[0m' # No Color
 
 info() {
-    echo -e "${BLUE}==>${NC} ${BOLD}$1${NC}"
+    echo -e "${BLUE}==>${NC} ${BOLD}$1${NC}" >&2
 }
 
 success() {
-    echo -e "${GREEN}==>${NC} ${BOLD}$1${NC}"
+    echo -e "${GREEN}==>${NC} ${BOLD}$1${NC}" >&2
 }
 
 warn() {
-    echo -e "${YELLOW}Warning:${NC} $1"
+    echo -e "${YELLOW}Warning:${NC} $1" >&2
 }
 
 error() {
@@ -57,6 +57,19 @@ error() {
 
 command_exists() {
     command -v "$1" >/dev/null 2>&1
+}
+
+# Check if we have a TTY for interactive prompts
+has_tty() {
+    [[ -t 0 ]] || [[ -e /dev/tty ]]
+}
+
+require_tty() {
+    if ! has_tty; then
+        error "Interactive mode requires a TTY. Use --skip-config for non-interactive installation."
+        error "Example: curl -fsSL ... | bash -s -- --skip-config"
+        exit 1
+    fi
 }
 
 detect_platform() {
@@ -157,10 +170,12 @@ prompt() {
     local result
 
     if [[ -n "$default" ]]; then
-        read -rp "$(echo -e "${CYAN}?${NC} ${prompt_text} [${default}]: ")" result
+        echo -en "${CYAN}?${NC} ${prompt_text} [${default}]: " >/dev/tty
+        read -r result </dev/tty
         echo "${result:-$default}"
     else
-        read -rp "$(echo -e "${CYAN}?${NC} ${prompt_text}: ")" result
+        echo -en "${CYAN}?${NC} ${prompt_text}: " >/dev/tty
+        read -r result </dev/tty
         echo "$result"
     fi
 }
@@ -169,8 +184,9 @@ prompt_secret() {
     local prompt_text="$1"
     local result
 
-    read -rsp "$(echo -e "${CYAN}?${NC} ${prompt_text}: ")" result
-    echo
+    echo -en "${CYAN}?${NC} ${prompt_text}: " >/dev/tty
+    read -rs result </dev/tty
+    echo >/dev/tty
     echo "$result"
 }
 
@@ -180,18 +196,19 @@ prompt_choice() {
     local options=("$@")
     local choice
 
-    echo -e "${CYAN}?${NC} ${prompt_text}"
+    echo -e "${CYAN}?${NC} ${prompt_text}" >/dev/tty
     for i in "${!options[@]}"; do
-        echo "  $((i + 1))) ${options[$i]}"
+        echo "  $((i + 1))) ${options[$i]}" >/dev/tty
     done
 
     while true; do
-        read -rp "  Enter choice [1-${#options[@]}]: " choice
+        echo -en "  Enter choice [1-${#options[@]}]: " >/dev/tty
+        read -r choice </dev/tty
         if [[ "$choice" =~ ^[0-9]+$ ]] && [[ "$choice" -ge 1 ]] && [[ "$choice" -le "${#options[@]}" ]]; then
             echo "${options[$((choice - 1))]}"
             return
         fi
-        echo "  Invalid choice. Please enter a number between 1 and ${#options[@]}."
+        echo "  Invalid choice. Please enter a number between 1 and ${#options[@]}." >/dev/tty
     done
 }
 
@@ -201,10 +218,12 @@ prompt_yes_no() {
     local result
 
     if [[ "$default" == "y" ]]; then
-        read -rp "$(echo -e "${CYAN}?${NC} ${prompt_text} [Y/n]: ")" result
+        echo -en "${CYAN}?${NC} ${prompt_text} [Y/n]: " >/dev/tty
+        read -r result </dev/tty
         result="${result:-y}"
     else
-        read -rp "$(echo -e "${CYAN}?${NC} ${prompt_text} [y/N]: ")" result
+        echo -en "${CYAN}?${NC} ${prompt_text} [y/N]: " >/dev/tty
+        read -r result </dev/tty
         result="${result:-n}"
     fi
 
@@ -487,6 +506,9 @@ main() {
 
     # Configuration setup
     if [[ "$skip_config" == false ]]; then
+        # Require TTY for interactive configuration
+        require_tty
+
         echo
         info "Configuration Setup"
         echo
@@ -530,6 +552,9 @@ main() {
 
     # Claude Code hooks setup
     if [[ "$skip_hooks" == false ]]; then
+        # Require TTY for interactive hooks setup
+        require_tty
+
         echo
         if prompt_yes_no "Configure Claude Code hooks?" "y"; then
             setup_claude_hooks
