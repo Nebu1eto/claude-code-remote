@@ -119,8 +119,6 @@ pub async fn send_notification(config: &Config, event: &StopEvent) -> Result<(),
         return Ok(());
     }
 
-    let bot = Bot::new(&config.telegram_bot_token);
-
     let project_name = event.get_project_name();
 
     // Build message
@@ -142,10 +140,21 @@ pub async fn send_notification(config: &Config, event: &StopEvent) -> Result<(),
         lines.push(format!("*Summary:*\n{}", summary));
     }
 
-    bot.send_message(config.telegram_chat_id, lines.join("\n"))
-        .parse_mode(ParseMode::MarkdownV2)
-        .await?;
+    let message = lines.join("\n");
 
+    // Send via primary messenger
+    // TODO: Add Discord/Signal support for stop notifications
+    if let Some(ref telegram_config) = config.telegram {
+        if telegram_config.enabled {
+            let bot = Bot::new(&telegram_config.bot_token);
+            bot.send_message(telegram_config.chat_id, message)
+                .parse_mode(ParseMode::MarkdownV2)
+                .await?;
+            return Ok(());
+        }
+    }
+
+    // No messenger available - silently skip
     Ok(())
 }
 

@@ -222,15 +222,13 @@ pub struct DiscordConfig {
 /// Application configuration.
 #[derive(Debug, Clone)]
 pub struct Config {
-    /// Telegram configuration (always present for backward compat)
-    pub telegram_bot_token: String,
-    pub telegram_chat_id: ChatId,
+    /// Optional Telegram configuration
+    pub telegram: Option<TelegramConfig>,
     /// System hostname
     pub hostname: String,
     /// Request timeout in seconds
     pub timeout_seconds: u64,
     /// Primary messenger to use ("telegram", "discord", "signal")
-    #[cfg_attr(not(feature = "discord"), allow(dead_code))]
     pub primary_messenger: String,
     /// Optional Signal configuration (only with signal feature)
     #[cfg(feature = "signal")]
@@ -294,35 +292,42 @@ impl Config {
 
     /// Parse new configuration format.
     fn from_new_format(config: NewConfigFile) -> Result<Self, ConfigError> {
+        let hostname = get_hostname();
+
+        // Parse Telegram config if present
         let telegram = config
             .messengers
             .telegram
-            .ok_or_else(|| ConfigError::MissingField("messengers.telegram".to_string()))?;
-
-        if telegram.bot_token.is_empty() {
-            return Err(ConfigError::MissingField(
-                "messengers.telegram.bot_token".to_string(),
-            ));
-        }
-
-        let chat_id = telegram.chat_id.to_chat_id()?;
-        let hostname = get_hostname();
+            .filter(|t| t.enabled && !t.bot_token.is_empty())
+            .map(|t| {
+                t.chat_id.to_chat_id().map(|chat_id| TelegramConfig {
+                    enabled: t.enabled,
+                    bot_token: t.bot_token,
+                    chat_id,
+                })
+            })
+            .transpose()?;
 
         #[cfg(feature = "signal")]
-        let signal = config.messengers.signal.map(|s| SignalConfig {
-            enabled: s.enabled,
-            phone_number: s.phone_number,
-            device_name: s.device_name,
-            data_path: s
-                .data_path
-                .map(PathBuf::from)
-                .unwrap_or_else(default_signal_data_path),
-        });
+        let signal = config
+            .messengers
+            .signal
+            .filter(|s| s.enabled)
+            .map(|s| SignalConfig {
+                enabled: s.enabled,
+                phone_number: s.phone_number,
+                device_name: s.device_name,
+                data_path: s
+                    .data_path
+                    .map(PathBuf::from)
+                    .unwrap_or_else(default_signal_data_path),
+            });
 
         #[cfg(feature = "discord")]
         let discord = config
             .messengers
             .discord
+            .filter(|d| d.enabled)
             .map(|d| {
                 d.user_id.to_u64().map(|user_id| DiscordConfig {
                     enabled: d.enabled,
@@ -332,17 +337,71 @@ impl Config {
             })
             .transpose()?;
 
+        // Check at least one messenger is configured
+        let has_messenger = telegram.is_some();
+        #[cfg(feature = "signal")]
+        let has_messenger = has_messenger || signal.is_some();
+        #[cfg(feature = "discord")]
+        let has_messenger = has_messenger || discord.is_some();
+
+        if !has_messenger {
+            return Err(ConfigError::MissingField(
+                "At least one messenger must be configured and enabled".to_string(),
+            ));
+        }
+
+        // Determine primary messenger
+        let primary = &config.preferences.primary_messenger;
+        let primary_messenger = Self::resolve_primary_messenger(
+            primary,
+            telegram.is_some(),
+            #[cfg(feature = "discord")]
+            discord.is_some(),
+            #[cfg(not(feature = "discord"))]
+            false,
+            #[cfg(feature = "signal")]
+            signal.is_some(),
+            #[cfg(not(feature = "signal"))]
+            false,
+        );
+
         Ok(Self {
-            telegram_bot_token: telegram.bot_token,
-            telegram_chat_id: chat_id,
+            telegram,
             hostname,
             timeout_seconds: config.preferences.timeout_seconds,
-            primary_messenger: config.preferences.primary_messenger,
+            primary_messenger,
             #[cfg(feature = "signal")]
             signal,
             #[cfg(feature = "discord")]
             discord,
         })
+    }
+
+    /// Resolve the primary messenger based on config and availability.
+    fn resolve_primary_messenger(
+        preferred: &str,
+        has_telegram: bool,
+        has_discord: bool,
+        has_signal: bool,
+    ) -> String {
+        // Check if preferred messenger is available
+        match preferred {
+            "telegram" if has_telegram => "telegram".to_string(),
+            "discord" if has_discord => "discord".to_string(),
+            "signal" if has_signal => "signal".to_string(),
+            _ => {
+                // Fallback to first available messenger
+                if has_telegram {
+                    "telegram".to_string()
+                } else if has_discord {
+                    "discord".to_string()
+                } else if has_signal {
+                    "signal".to_string()
+                } else {
+                    preferred.to_string()
+                }
+            }
+        }
     }
 
     /// Parse legacy configuration format.
@@ -355,8 +414,11 @@ impl Config {
         let hostname = get_hostname();
 
         Ok(Self {
-            telegram_bot_token: config.telegram_bot_token,
-            telegram_chat_id: chat_id,
+            telegram: Some(TelegramConfig {
+                enabled: true,
+                bot_token: config.telegram_bot_token,
+                chat_id,
+            }),
             hostname,
             timeout_seconds: default_timeout_seconds(),
             primary_messenger: default_primary_messenger(),
@@ -385,8 +447,11 @@ impl Config {
         let hostname = get_hostname();
 
         Ok(Self {
-            telegram_bot_token: token,
-            telegram_chat_id: chat_id,
+            telegram: Some(TelegramConfig {
+                enabled: true,
+                bot_token: token,
+                chat_id,
+            }),
             hostname,
             timeout_seconds: default_timeout_seconds(),
             primary_messenger: default_primary_messenger(),
@@ -395,6 +460,11 @@ impl Config {
             #[cfg(feature = "discord")]
             discord: None,
         })
+    }
+
+    /// Get Telegram config if available and enabled.
+    pub fn telegram(&self) -> Option<&TelegramConfig> {
+        self.telegram.as_ref().filter(|t| t.enabled)
     }
 }
 
@@ -425,8 +495,9 @@ mod tests {
         .unwrap();
 
         let config = Config::from_json(&config_path).unwrap();
-        assert_eq!(config.telegram_bot_token, "test_token");
-        assert_eq!(config.telegram_chat_id, ChatId(123456));
+        let telegram = config.telegram().unwrap();
+        assert_eq!(telegram.bot_token, "test_token");
+        assert_eq!(telegram.chat_id, ChatId(123456));
         assert_eq!(config.timeout_seconds, 300); // Default
     }
 
@@ -441,8 +512,9 @@ mod tests {
         .unwrap();
 
         let config = Config::from_json(&config_path).unwrap();
-        assert_eq!(config.telegram_bot_token, "test_token");
-        assert_eq!(config.telegram_chat_id, ChatId(123456));
+        let telegram = config.telegram().unwrap();
+        assert_eq!(telegram.bot_token, "test_token");
+        assert_eq!(telegram.chat_id, ChatId(123456));
     }
 
     #[test]
@@ -477,8 +549,9 @@ mod tests {
         .unwrap();
 
         let config = Config::from_json(&config_path).unwrap();
-        assert_eq!(config.telegram_bot_token, "new_token");
-        assert_eq!(config.telegram_chat_id, ChatId(789012));
+        let telegram = config.telegram().unwrap();
+        assert_eq!(telegram.bot_token, "new_token");
+        assert_eq!(telegram.chat_id, ChatId(789012));
         assert_eq!(config.timeout_seconds, 300); // Default
     }
 
@@ -505,13 +578,14 @@ mod tests {
         .unwrap();
 
         let config = Config::from_json(&config_path).unwrap();
-        assert_eq!(config.telegram_bot_token, "token123");
-        assert_eq!(config.telegram_chat_id, ChatId(111222));
+        let telegram = config.telegram().unwrap();
+        assert_eq!(telegram.bot_token, "token123");
+        assert_eq!(telegram.chat_id, ChatId(111222));
         assert_eq!(config.timeout_seconds, 600);
     }
 
     #[test]
-    fn test_new_config_missing_telegram() {
+    fn test_new_config_no_messengers() {
         let dir = tempdir().unwrap();
         let config_path = dir.path().join("config.json");
         fs::write(
@@ -522,6 +596,29 @@ mod tests {
         )
         .unwrap();
 
+        let result = Config::from_json(&config_path);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_new_config_telegram_disabled() {
+        let dir = tempdir().unwrap();
+        let config_path = dir.path().join("config.json");
+        fs::write(
+            &config_path,
+            r#"{
+                "messengers": {
+                    "telegram": {
+                        "enabled": false,
+                        "bot_token": "token",
+                        "chat_id": 123
+                    }
+                }
+            }"#,
+        )
+        .unwrap();
+
+        // Should fail because no enabled messenger
         let result = Config::from_json(&config_path);
         assert!(result.is_err());
     }

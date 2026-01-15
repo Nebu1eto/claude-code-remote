@@ -82,11 +82,47 @@ async fn print_status() -> Result<()> {
             println!("✅ Configuration: Found");
             println!("   Hostname: {}", config.hostname);
             println!("   Timeout: {}s", config.timeout_seconds);
+            println!("   Primary: {}", config.primary_messenger);
             println!();
-            println!("📱 Telegram:");
-            println!("   Status: Configured");
-            println!("   Chat ID: {}", config.telegram_chat_id);
 
+            // Telegram status
+            println!("📱 Telegram:");
+            if let Some(telegram) = config.telegram() {
+                println!("   Status: Enabled");
+                println!("   Chat ID: {}", telegram.chat_id);
+            } else if config.telegram.is_some() {
+                println!("   Status: Disabled");
+            } else {
+                println!("   Status: Not configured");
+            }
+
+            // Discord status
+            #[cfg(feature = "discord")]
+            {
+                println!();
+                println!("💬 Discord:");
+                if let Some(discord) = &config.discord {
+                    println!(
+                        "   Status: {}",
+                        if discord.enabled {
+                            "Enabled"
+                        } else {
+                            "Disabled"
+                        }
+                    );
+                    println!("   User ID: {}", discord.user_id);
+                } else {
+                    println!("   Status: Not configured");
+                }
+            }
+
+            #[cfg(not(feature = "discord"))]
+            {
+                println!();
+                println!("💬 Discord: Not available (compile with --features discord)");
+            }
+
+            // Signal status
             #[cfg(feature = "signal")]
             {
                 println!();
@@ -119,8 +155,14 @@ async fn print_status() -> Result<()> {
             println!("❌ Configuration: Not found or invalid");
             println!("   Error: {}", e);
             println!();
-            println!("Create config at ~/.claude/telegram_hook.json:");
-            println!(r#"  {{"telegram_bot_token": "...", "telegram_chat_id": "..."}}"#);
+            println!("Create config at ~/.claude/hook_config.json:");
+            println!(
+                r#"  {{
+    "messengers": {{
+      "telegram": {{"bot_token": "...", "chat_id": "..."}}
+    }}
+  }}"#
+            );
         }
     }
 

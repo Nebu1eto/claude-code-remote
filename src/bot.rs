@@ -107,7 +107,12 @@ async fn status_handler(bot: Bot, msg: Message, config: &Config) -> ResponseResu
 /// Main entry point for the bot.
 pub async fn run() -> Result<()> {
     let config = Config::load(None)?;
-    let bot = Bot::new(&config.telegram_bot_token);
+
+    let telegram_config = config
+        .telegram()
+        .ok_or_else(|| anyhow::anyhow!("Telegram not configured or disabled"))?;
+
+    let bot = Bot::new(&telegram_config.bot_token);
 
     tracing::info!("Starting Claude Code Telegram Bot...");
 
